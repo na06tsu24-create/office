@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>포커스 메이트 | 미니멀 루틴 플래너</title>
+    <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #fafafa;       /* 미니멀 오프화이트 */
+            --primary-color: #111111;  /* 세련된 딥 블랙 */
+            --border-color: #e5e5e5;   /* 차분한 라이트 그레이 */
+            --text-main: #222222;
+            --text-sub: #737373;
+            --active-bg: #f4f4f5;
+        }
+        
+        body {
+            font-family: 'Gowun Dodum', sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 0;
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        /* 스마트폰 화면 프레임 */
+        .phone-frame {
+            width: 390px;
+            height: 780px;
+            background: var(--bg-color);
+            border-radius: 36px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1);
+            border: 6px solid #1a1a1a;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .phone-header {
+            height: 26px;
+            background: #1a1a1a;
+            width: 140px;
+            margin: 0 auto;
+            border-bottom-left-radius: 18px;
+            border-bottom-right-radius: 18px;
+            position: absolute;
+            top: 0; left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+        }
+
+        .content-area {
+            flex: 1;
+            padding: 45px 24px 85px 24px;
+            overflow-y: auto;
+            box-sizing: border-box;
+        }
+
+        /* 하단 탭 내비게이션 */
+        .nav-bar {
+            position: absolute;
+            bottom: 0; left: 0; width: 100%;
+            height: 65px;
+            background: white;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            z-index: 1000;
+            box-sizing: border-box;
+        }
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-size: 0.8rem;
+            color: #a3a3a3;
+            cursor: pointer;
+            font-weight: 500;
+            background: none;
+            border: none;
+            font-family: inherit;
+        }
+        .nav-item.active { color: var(--primary-color); font-weight: bold; }
+
+        .page { display: none; }
+        .page.active { display: block; }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 16px;
+            margin-bottom: 16px;
+            border: 1px solid var(--border-color);
+        }
+        h2 { font-size: 1.05rem; margin-top: 0; margin-bottom: 14px; color: var(--primary-color); font-weight: bold; letter-spacing: -0.3px; }
+
+        /* 미니멀 플랫 버튼 */
+        .btn {
+            background-color: var(--primary-color);
+            color: white; border: none; padding: 13px;
+            font-size: 0.9rem; border-radius: 8px;
+            cursor: pointer; font-weight: bold; width: 100%;
+            font-family: inherit; transition: background 0.2s;
+        }
+        .btn:hover { background-color: #27272a; }
+        .btn:disabled { background-color: #e5e5e5; color: #a3a3a3; cursor: not-allowed; }
+
+        /* 라운지 현황 바 */
+        .live-status { display: flex; align-items: center; justify-content: space-between; background: #f4f4f5; padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; font-size: 0.75rem; font-weight: 500; color: #404040;}
+        .live-dot { width: 6px; height: 6px; background-color: #10b981; border-radius: 50%; display: inline-block; margin-right: 6px;}
+
+        /* [탭1] 출석 도장판 */
+        .stamp-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-top: 15px; }
+        .stamp {
+            aspect-ratio: 1; background: transparent; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.75rem; color: #a3a3a3; font-weight: 500; border: 1px solid var(--border-color);
+            position: relative; transition: all 0.2s;
+        }
+        .stamp.active { background: var(--primary-color); color: white; border-color: var(--primary-color); font-weight: bold; }
+        .stamp.reward-day { border: 1px dashed #737373; }
+
+        /* 가상 QR 카메라 스캔 UI 모달 레이어 */
+        .qr-scanner-overlay {
+            display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #111; z-index: 99999; flex-direction: column; justify-content: center; align-items: center; color: white;
+        }
+        .scanner-viewfinder {
+            width: 200px; height: 200px; border: 2px solid white; border-radius: 16px; margin-bottom: 24px;
+            position: relative; overflow: hidden; background: rgba(255,255,255,0.05);
+        }
+        .scanner-laser {
+            position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: #ef4444;
+            box-shadow: 0 0 8px #ef4444; animation: scanning 2s infinite linear;
+        }
+        @keyframes scanning { 0% { top: 0%; } 50% { top: 100%; } 100% { top: 0%; } }
+
+        /* [탭2] 타이머 & 프로그레스 */
+        .timer-display { font-size: 2.4rem; font-weight: bold; text-align: center; margin: 15px 0; color: var(--primary-color); letter-spacing: 0.5px; }
+        .timer-controls { display: flex; justify-content: center; gap: 8px; margin-bottom: 5px; }
+        .btn-sm { padding: 8px 16px; font-size: 0.8rem; width: auto; background-color: #f4f4f5; border: 1px solid var(--border-color); border-radius: 6px; color: #404040; font-weight: 500; }
+        .btn-sm:hover { background-color: #e4e4e7; }
+        
+        .progress-container { margin: 4px 0 16px 0; }
+        .progress-label { font-size: 0.75rem; color: var(--text-sub); display: flex; justify-content: space-between; margin-bottom: 6px; }
+        .progress-bar-bg { background: #f4f4f5; height: 6px; border-radius: 10px; overflow: hidden; }
+        .progress-bar-fill { background: var(--primary-color); width: 0%; height: 100%; transition: width 0.3s ease; }
+
+        .todo-input-box { display: flex; gap: 6px; margin-bottom: 12px; }
+        .todo-input { flex: 1; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); font-family: inherit; font-size: 0.85rem; background: #fafafa; }
+        .todo-input:focus { outline: none; border-color: var(--primary-color); background: white; }
+        .todo-list { list-style: none; padding: 0; margin: 0; }
+        .todo-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #f5f5f5; font-size: 0.85rem; color: #404040; }
+        .todo-item input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--primary-color); cursor: pointer; }
+        .todo-item.completed span { text-decoration: line-through; color: #a3a3a3; }
+        
+        .diary-input { width: 100%; height: 65px; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); box-sizing: border-box; resize: none; font-family: inherit; font-size: 0.85rem; background: #fafafa; }
+
+        /* [탭3] 마이페이지 */
+        .profile-card { text-align: left; background: white; position: relative; padding: 22px 20px;}
+        .streak-badge { position: absolute; top: 22px; right: 20px; background: #f4f4f5; border: 1px solid var(--border-color); padding: 4px 10px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; color: var(--primary-color); }
+        
+        .badge-container { display: flex; flex-direction: column; gap: 12px; margin-top: 5px; }
+        .badge-row { display: flex; justify-content: space-around; gap: 10px; }
+        .badge-box { display: flex; flex-direction: column; align-items: center; width: 30%; }
+        .badge { width: 46px; height: 46px; border-radius: 8px; background: #fafafa; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; color: #a3a3a3; opacity: 0.4; transition: all 0.3s; border: 1px solid var(--border-color); box-sizing: border-box; font-weight: bold; }
+        .badge.earned { opacity: 1; background: var(--primary-color); color: white; border-color: var(--primary-color); }
+        .badge-label { font-size: 0.7rem; color: var(--text-sub); text-align: center; margin-top: 6px; font-weight: 500; }
+        
+        .history-list { font-size: 0.8rem; color: #404040; text-align: left; max-height: 120px; overflow-y: auto; }
+        .history-item { margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #f5f5f5; line-height: 1.4; }
+
+        .roulette-box { text-align: center; background: #fafafa; padding: 15px; border-radius: 8px; border: 1px dashed var(--border-color); display: none; margin-top: 12px;}
+
+        /* 토스트 및 모달 */
+        .toast { position: fixed; bottom: 85px; left: 50%; transform: translateX(-50%); background: #18181b; color: white; padding: 10px 20px; border-radius: 6px; font-size: 0.75rem; z-index: 10000; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.2); justify-content: center; align-items: center; z-index: 9999; }
+        .modal-content { background: white; padding: 24px; border-radius: 12px; text-align: center; max-width: 290px; width: 80%; border: 1px solid var(--primary-color); animation: pop 0.2s; }
+        .coupon { font-size: 1.05rem; font-weight: bold; color: var(--primary-color); margin: 15px 0; padding: 12px; border: 1px solid var(--primary-color); background: #fafafa; border-radius: 4px; }
+
+        @keyframes pop { 0% { transform: scale(0.96); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+    </style>
+</head>
+<body>
+
+<div class="phone-frame">
+    <div class="phone-header"></div>
+    
+    <!-- 가상 QR 스캔 카메라 화면 레이어 -->
+    <div class="qr-scanner-overlay" id="qrOverlay">
+        <div class="scanner-viewfinder">
+            <div class="scanner-laser"></div>
+        </div>
+        <p style="font-size: 0.9rem; font-weight: 500; letter-spacing: -0.3px;">라운지 QR 코드를 스캔하세요</p>
+        <p style="font-size: 0.75rem; color: #a3a3a3; margin-top: -6px;">데스크 또는 도어락 근처에 비치되어 있습니다.</p>
+        <button class="btn-sm" id="closeScannerBtn" style="background: rgba(255,255,255,0.15); border: none; color: white; margin-top: 20px; padding: 10px 24px;">취소</button>
+    </div>
+
+    <div class="content-area">
+        
+        <!-- 탭 1: 출석체크 페이지 -->
+        <div id="page-attendance" class="page active">
+            <h1 style="font-size: 1.35rem; text-align: left; color: var(--primary-color); margin-top: 10px; margin-bottom: 4px; font-weight: bold; letter-spacing: -0.5px;">Focus Mate</h1>
+            <p style="text-align: left; font-size: 0.8rem; margin-top: 0; margin-bottom: 24px; color: var(--text-sub);">공유 오피스 루틴 챌린지</p>
+            
+            <div class="live-status">
+                <span><span class="live-dot"></span>강남 라운지</span>
+                <span>현재 <b id="liveUserCount">14</b>명 이용 중</span>
+            </div>
+
+            <div class="card">
+                <h2>30일 출석 도장판</h2>
+                <button class="btn" id="openScannerBtn">QR 코드 인증하여 출석</button>
+                <p style="font-size: 0.7rem; color: var(--text-sub); margin-top: 12px; margin-bottom: 0; line-height: 1.4;">
+                    10일/20일 달성 시 라운지 쿠폰 지급 | 30일 완주 시 다음 달 멤버십 10% 할인이 적용됩니다.
+                </p>
+                <div class="stamp-grid" id="stampGrid"></div>
+            </div>
+        </div>
+
+        <!-- 탭 2: 공부정리(플래너) 페이지 -->
+        <div id="page-planner" class="page">
+            <h1 style="font-size: 1.35rem; color: var(--primary-color); margin-top: 10px; margin-bottom: 24px; font-weight: bold; letter-spacing: -0.5px;">Daily Planner</h1>
+            
+            <!-- 순공 타이머 카드 -->
+            <div class="card">
+                <h2>오늘의 집중 시간</h2>
+                <div class="timer-display" id="timerDisplay">00:00:00</div>
+                <div class="timer-controls">
+                    <button class="btn btn-sm" id="startBtn">시작</button>
+                    <button class="btn btn-sm" id="stopBtn">정지</button>
+                    <button class="btn btn-sm" id="resetBtn">리셋</button>
+                </div>
+            </div>
+
+            <!-- 투두 리스트 플래너 카드 -->
+            <div class="card">
+                <h2>학습 계획</h2>
+                
+                <div class="progress-container">
+                    <div class="progress-label">
+                        <span>달성률</span>
+                        <span id="progressPercent">0%</span>
+                    </div>
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" id="progressBar"></div>
+                    </div>
+                </div>
+
+                <div class="todo-input-box">
+                    <input type="text" id="todoInput" class="todo-input" placeholder="계획 추가">
+                    <button class="btn btn-sm" id="addTodoBtn" style="border-radius:6px; padding:0 14px;">+ 추가</button>
+                </div>
+                <ul class="todo-list" id="todoList">
+                    <li class="todo-item"><input type="checkbox" onchange="toggleTodo(this)"> <span>공유오피스 입실 및 좌석 확인</span></li>
+                </ul>
+            </div>
+
+            <!-- 하루 일지 카드 -->
+            <div class="card">
+                <h2>오늘 하루 기록</h2>
+                <textarea id="diaryInput" class="diary-input" placeholder="오늘 달성한 항목과 짤막한 회고를 작성하세요."></textarea>
+                <button class="btn btn-sm" id="savePlannerBtn" style="margin-top: 12px; width: 100%; background: var(--primary-color); color: white;">오늘의 플래너 마감</button>
+            </div>
+        </div>
+
+        <!-- 탭 3: 마이페이지 -->
+        <div id="page-mypage" class="page">
+            <h1 style="font-size: 1.35rem; color: var(--primary-color); margin-top: 10px; margin-bottom: 24px; font-weight: bold; letter-spacing: -0.5px;">My Lounge</h1>
+            
+            <div class="card profile-card">
+                <div class="streak-badge">연속 <span id="myStreakCount">0</span>일 완료</div>
+                
+                <div style="font-weight: bold; font-size: 1.05rem; margin-bottom: 8px;">멤버 계정</div>
+                <div style="font-size: 0.8rem; color: var(--text-sub); margin-bottom: 4px;">누적 출석일수: <span id="myAttendanceCount" style="color:var(--primary-color); font-weight:bold;">0</span>일</div>
+                <div style="font-size: 0.8rem; color: var(--text-sub);">금일 누적 몰입: <span id="myStudyTime" style="color:var(--primary-color); font-weight:bold;">00:00:00</span></div>
+            </div>
+
+            <!-- 오피스 전용 모바일 카페테리아 리워드 -->
+            <div class="card">
+                <h2>라운지 리워드</h2>
+                <p style="font-size:0.75rem; margin: -6px 0 12px 0; color: var(--text-sub);">플래너 마감 후 보상 응모가 가능합니다.</p>
+                <button class="btn" id="goRouletteBtn" style="font-size:0.8rem; padding:10px;" disabled>플래너 마감 후 활성화</button>
+                
+                <div class="roulette-box" id="rouletteBox">
+                    <p style="font-size:0.75rem; font-weight:bold; color:var(--text-sub); margin-top:0;">멤버 전용 랜덤 리워드</p>
+                    <div id="rouletteText" style="font-size:1.05rem; font-weight:bold; color:var(--primary-color); margin: 12px 0;">[ 결과 대기 중 ]</div>
+                    <button class="btn btn-sm" id="spinBtn" style="background-color:var(--primary-color); color:white; width:100%; border:none;">추첨 시작</button>
+                </div>
+            </div>
+
+            <!-- 미니멀 텍스트 기반 배지 보관함 -->
+            <div class="card">
+                <h2>습관 인증 배지</h2>
+                <div class="badge-container">
+                    <div class="badge-row">
+                        <div class="badge-box">
+                            <div class="badge" id="badge-1">START</div>
+                            <div class="badge-label">첫 출석</div>
+                        </div>
+                        <div class="badge-box">
+                            <div class="badge" id="badge-10">10 DAYS</div>
+                            <div class="badge-label">열정 형성</div>
+                        </div>
+                        <div class="badge-box">
+                            <div class="badge" id="badge-30">MONTH</div>
+                            <div class="badge-label">한달 완주</div>
+                        </div>
+                    </div>
+                    <div class="badge-row" style="margin-top: 4px;">
+                        <div class="badge-box">
+                            <div class="badge" id="badge-study4">4 HOURS</div>
+                            <div class="badge-label">순공 4H</div>
+                        </div>
+                        <div class="badge-box">
+                            <div class="badge" id="badge-godsaeng">CLEAR</div>
+                            <div class="badge-label">계획 올클</div>
+                        </div>
+                        <div class="badge-box">
+                            <div class="badge" id="badge-writer">RECORD</div>
+                            <div class="badge-label">성장 기록</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>히스토리</h2>
+                <div class="history-list" id="historyList">
+                    <div id="noHistoryText" style="color:#a3a3a3; text-align:center; padding: 20px 0; font-size: 0.75rem;">기록된 히스토리가 없습니다.</div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- 하단 네비게이션 바 -->
+    <div class="nav-bar">
+        <button class="nav-item active" onclick="switchTab('attendance', this)">출석체크</button>
+        <button class="nav-item" onclick="switchTab('planner', this)">공부정리</button>
+        <button class="nav-item" onclick="switchTab('mypage', this)">마이룸</button>
+    </div>
+</div>
+
+<!-- 보상 팝업 모달 -->
+<div class="modal" id="rewardModal">
+    <div class="modal-content">
+        <h3 id="modalTitle" style="margin-top:0; font-size:1.1rem; color:var(--primary-color);">리워드 획득</h3>
+        <p id="modalDesc" style="font-size:0.8rem; color:var(--text-sub);"></p>
+        <div class="coupon" id="couponText">-</div>
+        <button class="btn" onclick="closeModal()" style="padding:10px; font-size:0.85rem;">확인</button>
+    </div>
+</div>
+
+<div class="toast" id="toastBar">안내 메시지</div>
+
+<script>
+    // --- [공통] 탭 전환 시스템 ---
+    function switchTab(pageId, element) {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
+        
+        document.getElementById(`page-${pageId}`).classList.add('active');
+        element.classList.add('active');
+
+        if(pageId === 'mypage') {
+            if(seconds > 0) {
+                document.getElementById('myStudyTime').innerText = timerDisplay.innerText;
+            }
+        }
+    }
+
+    // --- 토스트 알림 ---
+    function showToast(msg) {
+        const toast = document.getElementById('toastBar');
+        toast.innerText = msg;
+        toast.style.opacity = 1;
+        setTimeout(() => { toast.style.opacity = 0; }, 2000);
+    }
+
+    // --- 인원 변동 가상 시스템 ---
+    setInterval(() => {
+        const currentCount = parseInt(document.getElementById('liveUserCount').innerText);
+        const change = Math.random() > 0.5 ? 1 : -1;
+        let nextCount = currentCount + change;
+        if(nextCount < 10) nextCount = 12;
+        if(nextCount > 25) nextCount = 20;
+        document.getElementById('liveUserCount').innerText = nextCount;
+    }, 4000);
+
+    // --- [탭 1] QR 출석 시스템 및 도장판 구성 ---
+    let attendanceCount = 0;
+    const totalDays = 30;
+    const stampGrid = document.getElementById('stampGrid');
+    const openScannerBtn = document.getElementById('openScannerBtn');
+    const qrOverlay = document.getElementById('qrOverlay');
+    const closeScannerBtn = document.getElementById('closeScannerBtn');
+
+    for (let i = 1; i <= totalDays; i++) {
+        const stamp = document.createElement('div');
+        stamp.classList.add('stamp');
+        stamp.id = `stamp${i}`;
+        stamp.innerText = `${i}`;
+        if (i === 10 || i === 20 || i === 30) stamp.classList.add('reward-day');
+        stampGrid.appendChild(stamp);
+    }
+
+    // QR 스캔 애니메이션 레이어 핸들링
+    openScannerBtn.addEventListener('click', () => {
+        if (attendanceCount >= totalDays) {
+            showToast("이미 30일 완주 출석을 완료하셨습니다.");
+            return;
+        }
+        qrOverlay.style.display = 'flex';
+        
+        // 1.8초 뒤 자동 매칭 가상 성공 프로세스
+        setTimeout(() => {
+            if(qrOverlay.style.display === 'flex') {
+                qrOverlay.style.display = 'none';
+                executeCheckIn();
+            }
+        }, 1800);
+    });
+
+    closeScannerBtn.addEventListener('click', () => {
+        qrOverlay.style.display = 'none';
+    });
+
+    function executeCheckIn() {
+        attendanceCount++;
+        document.getElementById(`stamp${attendanceCount}`).classList.add('active');
+        openScannerBtn.innerText = `출석 완료 (${attendanceCount}/30)`;
+        document.getElementById('myAttendanceCount').innerText = attendanceCount;
+        
+        if(attendanceCount >= 1) document.getElementById('badge-1').classList.add('earned');
+        if(attendanceCount >= 10) document.getElementById('badge-10').classList.add('earned');
+        if(attendanceCount >= 30) document.getElementById('badge-30').classList.add('earned');
+
+        showToast("QR 체크인에 성공했습니다.");
+
+        if (attendanceCount === 10) showModal("10일 출석 리워드", "연속 학습자 전용 혜택", "개인 사물함 1주 이용권");
+        if (attendanceCount === 20) showModal("20일 돌파 리워드", "목표 달성을 응원합니다.", "라운지 자유석 일일 이용권");
+        if (attendanceCount === 30) showModal("30일 완주 성공", "한 달간 완벽한 루틴을 수립하셨습니다.", "멤버십 결제 10% 할인권");
+    }
+
+    // --- [탭 2] 타이머 & 투두 시스템 ---
+    let timerInterval;
+    let seconds = 0;
+    let streakCount = 0; 
+    const timerDisplay = document.getElementById('timerDisplay');
+
+    document.getElementById('startBtn').addEventListener('click', () => {
+        clearInterval(timerInterval);
+        timerInterval = setInterval(() => { seconds++; updateTimerDisplay(); }, 1000);
+        showToast("집중 타이머가 가동되었습니다.");
+    });
+    document.getElementById('stopBtn').addEventListener('click', () => {
+        clearInterval(timerInterval);
+        showToast("타이머가 일시정지 되었습니다.");
+    });
+    document.getElementById('resetBtn').addEventListener('click', () => { resetTimer(); });
+
+    function updateTimerDisplay() {
+        let hrs = Math.floor(seconds / 3600);
+        let mins = Math.floor((seconds % 3600) / 60);
+        let secs = seconds % 60;
+        timerDisplay.innerText = `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    function resetTimer() {
+        clearInterval(timerInterval);
+        seconds = 0;
+        updateTimerDisplay();
+    }
+
+    function updateProgressBar() {
+        const total = document.querySelectorAll('#todoList input[type="checkbox"]').length;
+        const checked = document.querySelectorAll('#todoList input[type="checkbox"]:checked').length;
+        const percent = total === 0 ? 0 : Math.round((checked / total) * 100);
+        
+        document.getElementById('progressBar').style.width = percent + '%';
+        document.getElementById('progressPercent').innerText = percent + '%';
+    }
+
+    document.getElementById('addTodoBtn').addEventListener('click', () => {
+        const input = document.getElementById('todoInput');
+        if(!input.value.trim()) return;
+        
+        const li = document.createElement('li');
+        li.className = 'todo-item';
+        li.innerHTML = `<input type="checkbox" onchange="toggleTodo(this)"> <span>${input.value}</span>`;
+        document.getElementById('todoList').appendChild(li);
+        input.value = '';
+        updateProgressBar();
+    });
+
+    function toggleTodo(checkbox) {
+        if(checkbox.checked) checkbox.parentElement.classList.add('completed');
+        else checkbox.parentElement.classList.remove('completed');
+        updateProgressBar();
+    }
+
+    updateProgressBar();
+
+
+    // --- 플래너 마감 및 리셋 로직 ---
+    document.getElementById('savePlannerBtn').addEventListener('click', () => {
+        const diaryText = document.getElementById('diaryInput').value.trim();
+        const currentTime = timerDisplay.innerText;
+        
+        if(!diaryText) {
+            alert("오늘 하루 기록을 작성해주세요.");
+            return;
+        }
+
+        document.getElementById('badge-writer').classList.add('earned');
+        if(seconds >= 14400) document.getElementById('badge-study4').classList.add('earned');
+
+        const checkboxes = document.querySelectorAll('#todoList input[type="checkbox"]');
+        let allChecked = checkboxes.length > 0; 
+        checkboxes.forEach(cb => { if(!cb.checked) allChecked = false; });
+        if(allChecked) document.getElementById('badge-godsaeng').classList.add('earned');
+
+        streakCount++;
+        document.getElementById('myStreakCount').innerText = streakCount;
+
+        const goRouletteBtn = document.getElementById('goRouletteBtn');
+        goRouletteBtn.removeAttribute('disabled');
+        goRouletteBtn.innerText = "라운지 리워드 추첨권 활성화됨";
+
+        const historyList = document.getElementById('historyList');
+        const noHistoryText = document.getElementById('noHistoryText');
+        if(noHistoryText) noHistoryText.remove();
+
+        const date = new Date();
+        const dateStr = `${date.getMonth()+1}/${date.getDate()}`;
+
+        const item = document.createElement('div');
+        item.className = 'history-item';
+        item.innerHTML = `<strong>[${dateStr}] 총 집중 ${currentTime}</strong> (연속 ${streakCount}일)<br>${diaryText}`;
+        historyList.prepend(item);
+        
+        alert("오늘의 플래너가 마감되었습니다.\n'마이룸' 탭에서 스토어 리워드 룰렛 응모가 가능합니다.");
+
+        resetTimer();
+        document.getElementById('diaryInput').value = '';
+        
+        const todoList = document.getElementById('todoList');
+        todoList.innerHTML = `<li class="todo-item"><input type="checkbox" onchange="toggleTodo(this)"> <span>공유오피스 입실 및 좌석 확인</span></li>`;
+        updateProgressBar();
+        
+        document.getElementById('myStudyTime').innerText = "00:00:00";
+    });
+
+    // --- 카페테리아 미니 추첨 룰렛 ---
+    const goRouletteBtn = document.getElementById('goRouletteBtn');
+    const rouletteBox = document.getElementById('rouletteBox');
+    const spinBtn = document.getElementById('spinBtn');
+    const rouletteText = document.getElementById('rouletteText');
+
+    goRouletteBtn.addEventListener('click', () => {
+        rouletteBox.style.display = 'block';
+        goRouletteBtn.style.display = 'none';
+    });
+
+    spinBtn.addEventListener('click', () => {
+        spinBtn.disabled = true;
+        rouletteText.innerText = "추첨을 진행 중입니다.";
+        
+        setTimeout(() => {
+            const rewards = [
+                "라운지 아메리카노 교환권",
+                "라운지 베이커리 1종 덤 쿠폰",
+                "F&B 브랜드 20% 할인권",
+                "에너지 바 웰컴 스낵 증정권"
+            ];
+            const finalReward = rewards[Math.floor(Math.random() * rewards.length)];
+            rouletteText.innerText = finalReward;
+            
+            setTimeout(() => {
+                showModal("라운지 리워드 수령 완료", "발급된 텍스트 코드를 데스크에 인증하여 사용하세요.", finalReward);
+                rouletteBox.style.display = 'none';
+                goRouletteBtn.style.display = 'block';
+                goRouletteBtn.setAttribute('disabled', true);
+                goRouletteBtn.innerText = "금일 리워드 수령 완료";
+            }, 800);
+        }, 1200);
+    });
+
+    function showModal(title, desc, coupon) {
+        document.getElementById('modalTitle').innerText = title;
+        document.getElementById('modalDesc').innerText = desc;
+        document.getElementById('couponText').innerText = coupon;
+        document.getElementById('rewardModal').style.display = 'flex';
+    }
+    function closeModal() { document.getElementById('rewardModal').style.display = 'none'; }
+</script>
+</body>
+</html>
